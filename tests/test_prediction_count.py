@@ -27,9 +27,10 @@ class TestProcessingCount(unittest.TestCase):
             "/predict",
             files={"file": ("test.jpg", self.image_bytes, "image/jpeg")}
         )
+        response2= self.client.get("/prediction/count")
         # Check response
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
+        self.assertEqual(response2.status_code, 200)
+        data = response2.json()
         self.assertEqual(data.get("count"), 1)
     
 
