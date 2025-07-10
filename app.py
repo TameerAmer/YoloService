@@ -127,6 +127,18 @@ def get_prediction_count():
         count = conn.execute("SELECT count(*) FROM prediction_sessions WHERE timestamp >= DATETIME('now', '-7 days')").fetchall()
     return {"count": count[0][0]}
 
+@app.get("/labels")
+def get_uniqe_labels():
+    """
+    Get all unique labels from detection objects
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute("SELECT DISTINCT label FROM detection_objects do join prediction_sessions ps ON do.prediction_uid = ps.uid WHERE ps.timestamp >= DATETIME('now', '-7 days')").fetchall()
+    labels=[]
+    for row in rows:
+        labels.append(row[0])
+    return {"labels": labels}
+
 @app.get("/prediction/{uid}")
 def get_prediction_by_uid(uid: str):
     """
@@ -236,4 +248,4 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run("app:app", host="0.0.0.0", port=8080,reload=True)
