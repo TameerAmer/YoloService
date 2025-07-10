@@ -1,14 +1,18 @@
+import os
 import unittest
 from fastapi.testclient import TestClient
 from PIL import Image
 import io
 
-from app import app
+from app import app, DB_PATH, init_db
 
 class TestProcessingCount(unittest.TestCase):
     def setUp(self):
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
         self.client = TestClient(app)
-        
+
+        init_db()
         # Create a simple test image
         self.test_image = Image.new('RGB', (100, 100), color='red')
         self.image_bytes = io.BytesIO()
