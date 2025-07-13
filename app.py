@@ -139,6 +139,39 @@ def get_uniqe_labels():
         labels.append(row[0])
     return {"labels": labels}
 
+@app.delete("/prediction/{uid}")
+def delete_prediction(uid: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        con1 = conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (uid,))
+        if con1.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Prediction not found")
+        
+        con2 = conn.execute("DELETE FROM prediction_sessions WHERE uid = ?", (uid,))
+        if con2.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Prediction not found")
+        
+        conn.commit()
+
+    # Check for the file with any of the known image extensions
+    deleted = False
+    for ext in [".jpg", ".jpeg", ".png"]:
+        upload_path = os.path.join(UPLOAD_DIR, uid + ext)
+        predict_path = os.path.join(PREDICTED_DIR, uid + ext)
+
+        if os.path.exists(upload_path):
+            os.remove(upload_path)
+            deleted = True
+        if os.path.exists(predict_path):
+            os.remove(predict_path)
+            deleted = True
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Prediction file not found")
+
+    return "Successfully Deleted"
+
+        
+
 @app.get("/prediction/{uid}")
 def get_prediction_by_uid(uid: str):
     """
