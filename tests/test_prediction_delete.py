@@ -6,6 +6,7 @@ import os
 from app import app, init_db,DB_PATH
 
 
+
 class Test_Delete(unittest.TestCase):
 
     def setUp(self):
