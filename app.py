@@ -109,8 +109,15 @@ def save_detection_object(prediction_uid, label, score, box):
             VALUES (?, ?, ?, ?)
         """, (prediction_uid, label, score, str(box)))
 
+#for the "Depends" statement in predict()
+def optional_auth(request: Request):
+    auth = request.headers.get("Authorization")
+    if not auth:
+        return None  # No credentials provided
+    return security(request)
+
 @app.post("/predict")
-def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredentials | None, Depends(security)] = None):
+def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredentials | None, Depends(optional_auth)] = None):
     """
     Predict objects in an image
     """
@@ -156,6 +163,7 @@ def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredent
         "labels": detected_labels,
         "time_took": processing_time
     }
+
 
 @app.get("/prediction/count")
 def get_prediction_count(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):

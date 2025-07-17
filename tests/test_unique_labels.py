@@ -1,3 +1,4 @@
+import base64
 import datetime
 import os
 import sqlite3
@@ -9,6 +10,10 @@ import io
 
 from app import app, DB_PATH, init_db
 
+def get_basic_auth_header(username: str, password: str) -> dict:
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
+
 class TestUniqueLabels(unittest.TestCase):
     def setUp(self):
         if os.path.exists(DB_PATH):
@@ -16,6 +21,12 @@ class TestUniqueLabels(unittest.TestCase):
         self.client = TestClient(app)
 
         init_db()
+        # Register test user
+        self.username = "tameer"
+        self.password = "1234"
+        auth_header = get_basic_auth_header(self.username, self.password)
+        self.client.post("/register", headers=auth_header)
+
         # Create a simple test image
         self.test_image = Image.new('RGB', (100, 100), color='red')
         self.image_bytes = io.BytesIO()
@@ -23,7 +34,9 @@ class TestUniqueLabels(unittest.TestCase):
         self.image_bytes.seek(0)
 
     def test_unique_labels_zero(self):
-        response = self.client.get("/labels")
+        headers = get_basic_auth_header(self.username, self.password)
+
+        response = self.client.get("/labels",headers=headers)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data.get("labels")), 0)
@@ -42,8 +55,8 @@ class TestUniqueLabels(unittest.TestCase):
             conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid1, "cat"))
             conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid2, "dog"))
             conn.commit()
-
-        response = self.client.get("/labels")
+        headers = get_basic_auth_header(self.username, self.password)
+        response = self.client.get("/labels",headers=headers)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data.get("labels"), ['cat', 'dog'])
@@ -61,7 +74,9 @@ class TestUniqueLabels(unittest.TestCase):
             conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid2, "cat"))
             conn.commit()
 
-        response = self.client.get("/labels")
+        headers = get_basic_auth_header(self.username, self.password)
+
+        response = self.client.get("/labels",headers=headers)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data.get("labels"), ['cat'])
