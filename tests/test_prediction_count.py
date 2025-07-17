@@ -3,8 +3,13 @@ import unittest
 from fastapi.testclient import TestClient
 from PIL import Image
 import io
+import base64
 
 from app import app, DB_PATH, init_db
+
+def get_basic_auth_header(username: str, password: str) -> dict:
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
 
 class TestProcessingCount(unittest.TestCase):
     def setUp(self):
@@ -13,6 +18,13 @@ class TestProcessingCount(unittest.TestCase):
         self.client = TestClient(app)
 
         init_db()
+
+        # Register test user
+        self.username = "tameer"
+        self.password = "1234"
+        auth_header = get_basic_auth_header(self.username, self.password)
+        self.client.post("/register", headers=auth_header)
+
         # Create a simple test image
         self.test_image = Image.new('RGB', (100, 100), color='red')
         self.image_bytes = io.BytesIO()
@@ -20,7 +32,8 @@ class TestProcessingCount(unittest.TestCase):
         self.image_bytes.seek(0)
 
     def test_prediction_count_empty(self):
-        response = self.client.get("/prediction/count")
+        headers = get_basic_auth_header(self.username, self.password)
+        response = self.client.get("/prediction/count", headers=headers)
         # Check response
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -31,7 +44,8 @@ class TestProcessingCount(unittest.TestCase):
             "/predict",
             files={"file": ("test.jpg", self.image_bytes, "image/jpeg")}
         )
-        response2= self.client.get("/prediction/count")
+        headers = get_basic_auth_header(self.username, self.password)
+        response2= self.client.get("/prediction/count", headers=headers)
         # Check response
         self.assertEqual(response2.status_code, 200)
         data = response2.json()
