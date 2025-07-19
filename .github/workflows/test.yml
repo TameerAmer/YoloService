@@ -25,8 +25,9 @@ jobs:
     - name: Run tests with coverage
       run: |
         pip install coverage
-        coverage run --omit="*/config.py,*/config-3.py" -m unittest discover -s tests -p "test_*.py"
+        coverage run --omit="*/config.py,*/config-3.py,/tmp/*" -m unittest discover -s tests -p "test_*.py"
         coverage xml
+
 
 
     - name: Upload coverage to Codecov
