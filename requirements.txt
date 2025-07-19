@@ -10,3 +10,8 @@ ultralytics>=8.0.0
 python-multipart>=0.0.6
 
 httpx
+
+#pytest
+pytest==7.4.0
+pytest-cov==4.1.0
+pytest-html==3.2.0
