@@ -72,4 +72,33 @@ class Test_Delete(unittest.TestCase):
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["message"], "Successfully Deleted")
 
+    def test_delete_prediction_rowcount_zero(self):
+        headers = get_basic_auth_header(self.username, self.password)
+        fake_uid = str(uuid.uuid4())
+
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (fake_uid, "ghost"))
+            conn.commit()
+
+        response = self.client.delete(f"/prediction/{fake_uid}", headers=headers)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Prediction not found")
+
+    def test_delete_prediction_session_missing(self):
+        headers = get_basic_auth_header(self.username, self.password)
+        now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+        uid = "existing_but_file_missing"
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("INSERT INTO prediction_sessions (uid, timestamp) VALUES (?, ?)", (uid, now))
+            conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid, "cat"))
+            conn.commit()
+        response = self.client.delete(f"/prediction/{uid}",headers=headers)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Prediction file not found")
+
+
+
+
 

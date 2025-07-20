@@ -110,11 +110,11 @@ def save_detection_object(prediction_uid, label, score, box):
         """, (prediction_uid, label, score, str(box)))
 
 #for the "Depends" statement in predict()
-def optional_auth(request: Request):
+async def optional_auth(request: Request):
     auth = request.headers.get("Authorization")
     if not auth:
         return None  # No credentials provided
-    return security(request)
+    return await security(request)
 
 @app.post("/predict")
 def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredentials | None, Depends(optional_auth)] = None):
@@ -126,7 +126,7 @@ def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredent
         try:
             username = verify_user(credentials)
         except HTTPException:
-            username = None     #Invalid credentials still allow prediction, username remains null
+            username = None    #Invalid credentials still allow prediction, username remains null
 
     start_time = time.time()
     
