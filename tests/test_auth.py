@@ -1,7 +1,7 @@
 import os
 import unittest
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image,ImageDraw
 import io
 import base64
 
@@ -58,5 +58,14 @@ class TestAuth(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data=response.json()
         self.assertEqual(data.get("status"), "ok")
+
+    def test_exception_handle_verify_user(self):
+        headers = get_basic_auth_header("", "")
+        response = self.client.get("/prediction/count",headers=headers)
+        self.assertEqual(response.status_code, 401)
+        data=response.json()
+        self.assertEqual(data.get("detail"),"Invalid username or password")
+
+     
 
         
