@@ -22,8 +22,8 @@ class TestGetPredictionImage(unittest.TestCase):
 
         # Create test image
         self.test_uid = "test123"
-        self.test_image_path = f"predicted/{self.test_uid}.jpg"
-        os.makedirs("predicted", exist_ok=True)
+        self.test_image_path = f"uploads/predicted/{self.test_uid}.jpg"
+        os.makedirs("uploads/predicted", exist_ok=True)
 
         image = Image.new("RGB", (100, 100), color="blue")
         image.save(self.test_image_path, format="JPEG")
@@ -75,7 +75,7 @@ class TestGetPredictionImage(unittest.TestCase):
 
     def test_get_prediction_image_png(self):
         # Prepare: Create dummy image file
-        image_path = "predicted/test_image.png"
+        image_path = "uploads/predicted/test_image.png"
         image = Image.new("RGB", (100, 100), color="green")
         image.save(image_path, format="PNG")
 
