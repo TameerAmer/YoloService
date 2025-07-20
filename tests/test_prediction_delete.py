@@ -1,4 +1,7 @@
+import datetime
+import sqlite3
 import unittest
+import uuid
 from fastapi.testclient import TestClient
 from PIL import Image
 import io
@@ -37,7 +40,7 @@ class Test_Delete(unittest.TestCase):
         self.assertEqual(response2.json()["detail"], "Prediction not found")
 
     
-    def test_delete_prediction(self):
+    def test_delete_prediction_not_found(self):
         
         response = self.client.post(
             "/predict",
@@ -48,7 +51,25 @@ class Test_Delete(unittest.TestCase):
 
         if response.json()["detection_count"] == 0:
             self.assertEqual(self.client.delete(f"/prediction/{uid}", headers=headers).status_code, 404)
-        else:
-            response2 = self.client.delete(f"/prediction/{uid}", headers=headers)
-            self.assertEqual(response2.status_code, 200)
-            self.assertEqual(response2.json()["message"], "Successfully Deleted")
+
+    
+    def test_delete_prediction_success(self):
+        # Make a prediction first
+        response = self.client.post(
+            "/predict",
+            files={"file": ("test.jpg", self.image_bytes, "image/jpeg")}
+        )
+        headers = get_basic_auth_header(self.username, self.password)
+        uid = response.json()["prediction_uid"]
+
+        # Force an artificial detection so delete won't 404
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid, "dog"))
+            conn.commit()
+
+        # Now delete should succeed
+        response2 = self.client.delete(f"/prediction/{uid}", headers=headers)
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(response2.json()["message"], "Successfully Deleted")
+
+
