@@ -117,10 +117,6 @@ class TestGetPredictionImage(unittest.TestCase):
             )
             conn.commit()
 
-        # Make sure the file does NOT exist
-        if os.path.exists(fake_path):
-            os.remove(fake_path)
-
         # Perform request
         response = self.client.get(
             f"/prediction/{uid}/image",
