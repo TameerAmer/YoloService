@@ -218,7 +218,7 @@ def delete_prediction(uid: str,credentials: Annotated[HTTPBasicCredentials, Depe
     if not deleted:
         raise HTTPException(status_code=404, detail="Prediction file not found")
 
-    return "Successfully Deleted"
+    return {"message": "Successfully Deleted"}
 
         
 
