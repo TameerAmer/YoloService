@@ -172,7 +172,7 @@ def get_prediction_count(credentials: Annotated[HTTPBasicCredentials, Depends(se
     """
     username = verify_user(credentials)
     with sqlite3.connect(DB_PATH) as conn:
-        count = conn.execute("SELECT count(*) FROM prediction_sessions WHERE timestamp >= DATETIME('now', '-7 days')").fetchall()
+        count = conn.execute("SELECT count(*) FROM prediction_sessions WHERE timestamp >= DATETIME('now', '-7 days') and username=?",(username,)).fetchall()
     return {"count": count[0][0]}
 
 @app.get("/labels")
@@ -182,7 +182,7 @@ def get_uniqe_labels(credentials: Annotated[HTTPBasicCredentials, Depends(securi
     """
     username = verify_user(credentials)
     with sqlite3.connect(DB_PATH) as conn:
-        rows = conn.execute("SELECT DISTINCT label FROM detection_objects do join prediction_sessions ps ON do.prediction_uid = ps.uid WHERE ps.timestamp >= DATETIME('now', '-7 days')").fetchall()
+        rows = conn.execute("SELECT DISTINCT label FROM detection_objects do join prediction_sessions ps ON do.prediction_uid = ps.uid WHERE ps.timestamp >= DATETIME('now', '-7 days') and username=?",(username,)).fetchall()
     labels=[]
     for row in rows:
         labels.append(row[0])
@@ -232,7 +232,7 @@ def get_prediction_by_uid(uid: str,credentials: Annotated[HTTPBasicCredentials, 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         # Get prediction session
-        session = conn.execute("SELECT * FROM prediction_sessions WHERE uid = ?", (uid,)).fetchone()
+        session = conn.execute("SELECT * FROM prediction_sessions WHERE uid = ? and username=?", (uid,username)).fetchone()
         if not session:
             raise HTTPException(status_code=404, detail="Prediction not found")
             
@@ -269,24 +269,25 @@ def get_predictions_by_label(label: str,credentials: Annotated[HTTPBasicCredenti
             SELECT DISTINCT ps.uid, ps.timestamp
             FROM prediction_sessions ps
             JOIN detection_objects do ON ps.uid = do.prediction_uid
-            WHERE do.label = ?
-        """, (label,)).fetchall()
+            WHERE do.label = ? and username=?
+        """, (label,username)).fetchall()
         
         return [{"uid": row["uid"], "timestamp": row["timestamp"]} for row in rows]
 
 @app.get("/predictions/score/{min_score}")
-def get_predictions_by_score(min_score: float):
+def get_predictions_by_score(min_score: float,credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
     """
     Get prediction sessions containing objects with score >= min_score
     """
+    username = verify_user(credentials)
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("""
             SELECT DISTINCT ps.uid, ps.timestamp
             FROM prediction_sessions ps
             JOIN detection_objects do ON ps.uid = do.prediction_uid
-            WHERE do.score >= ?
-        """, (min_score,)).fetchall()
+            WHERE do.score >= ? and username=?
+        """, (min_score,username)).fetchall()
         
         return [{"uid": row["uid"], "timestamp": row["timestamp"]} for row in rows]
 
@@ -311,7 +312,7 @@ def get_prediction_image(uid: str, request: Request,credentials: Annotated[HTTPB
     username = verify_user(credentials)
     accept = request.headers.get("accept", "")
     with sqlite3.connect(DB_PATH) as conn:
-        row = conn.execute("SELECT predicted_image FROM prediction_sessions WHERE uid = ?", (uid,)).fetchone()
+        row = conn.execute("SELECT predicted_image FROM prediction_sessions WHERE uid = ? and username=?", (uid,username)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Prediction not found")
         image_path = row[0]
