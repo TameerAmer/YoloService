@@ -117,7 +117,7 @@ async def optional_auth(request: Request):
     return await security(request)
 
 @app.post("/predict")
-def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredentials | None, Depends(optional_auth)] = None):
+def predict(file: UploadFile = File(...),credentials: Annotated[str | None, Depends(optional_auth)] = None):
     """
     Predict objects in an image
     """
@@ -166,21 +166,19 @@ def predict(file: UploadFile = File(...),credentials: Annotated[HTTPBasicCredent
 
 
 @app.get("/prediction/count")
-def get_prediction_count(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+def get_prediction_count(credentials: Annotated[str, Depends(verify_user)]):
     """
     Get total number of prediction sessions
     """
-    username = verify_user(credentials)
     with sqlite3.connect(DB_PATH) as conn:
         count = conn.execute("SELECT count(*) FROM prediction_sessions WHERE timestamp >= DATETIME('now', '-7 days')").fetchall()
     return {"count": count[0][0]}
 
 @app.get("/labels")
-def get_uniqe_labels(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+def get_uniqe_labels(credentials: Annotated[str, Depends(verify_user)]):
     """
     Get all unique labels from detection objects
     """
-    username = verify_user(credentials)
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute("SELECT DISTINCT label FROM detection_objects do join prediction_sessions ps ON do.prediction_uid = ps.uid WHERE ps.timestamp >= DATETIME('now', '-7 days')").fetchall()
     labels=[]
@@ -189,8 +187,7 @@ def get_uniqe_labels(credentials: Annotated[HTTPBasicCredentials, Depends(securi
     return {"labels": labels}
 
 @app.delete("/prediction/{uid}")
-def delete_prediction(uid: str,credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
-    username = verify_user(credentials)
+def delete_prediction(uid: str,credentials: Annotated[str, Depends(verify_user)]):
     with sqlite3.connect(DB_PATH) as conn:
         con1 = conn.execute("DELETE FROM detection_objects WHERE prediction_uid = ?", (uid,))
         if con1.rowcount == 0:
@@ -223,11 +220,10 @@ def delete_prediction(uid: str,credentials: Annotated[HTTPBasicCredentials, Depe
         
 
 @app.get("/prediction/{uid}")
-def get_prediction_by_uid(uid: str,credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+def get_prediction_by_uid(uid: str,credentials: Annotated[str, Depends(verify_user)]):
     """
     Get prediction session by uid with all detected objects
     """
-    username = verify_user(credentials)
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -258,11 +254,10 @@ def get_prediction_by_uid(uid: str,credentials: Annotated[HTTPBasicCredentials, 
         }
 
 @app.get("/predictions/label/{label}")
-def get_predictions_by_label(label: str,credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+def get_predictions_by_label(label: str,credentials: Annotated[str, Depends(verify_user)]):
     """
     Get prediction sessions containing objects with specified label
     """
-    username = verify_user(credentials)
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("""
@@ -291,11 +286,10 @@ def get_predictions_by_score(min_score: float):
         return [{"uid": row["uid"], "timestamp": row["timestamp"]} for row in rows]
 
 @app.get("/image/{type}/{filename}")
-def get_image(type: str, filename: str,credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+def get_image(type: str, filename: str,credentials: Annotated[str, Depends(verify_user)]):
     """
     Get image by type and filename
     """
-    username = verify_user(credentials)
     if type not in ["original", "predicted"]:
         raise HTTPException(status_code=400, detail="Invalid image type")
     path = os.path.join("uploads", type, filename)
@@ -304,11 +298,10 @@ def get_image(type: str, filename: str,credentials: Annotated[HTTPBasicCredentia
     return FileResponse(path)
 
 @app.get("/prediction/{uid}/image")
-def get_prediction_image(uid: str, request: Request,credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
+def get_prediction_image(uid: str, request: Request,credentials: Annotated[str, Depends(verify_user)]):
     """
     Get prediction image by uid
     """
-    username = verify_user(credentials)
     accept = request.headers.get("accept", "")
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute("SELECT predicted_image FROM prediction_sessions WHERE uid = ?", (uid,)).fetchone()
