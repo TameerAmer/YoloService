@@ -46,7 +46,7 @@ jobs:
           pip install -r torch-requirements.txt
 
           # Create or overwrite systemd service file for YOLO
-sudo tee /etc/systemd/system/yolo.service > /dev/null <<EOF
+          sudo tee /etc/systemd/system/yolo.service > /dev/null <<EOF
 [Unit]
 Description=Yolo Service
 After=network.target
@@ -59,11 +59,11 @@ User=ubuntu
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOF'
 
 
 # Restart the YOLO service
-sudo systemctl daemon-reload
-sudo systemctl enable yolo
-sudo systemctl start yolo
-sudo systemctl status yolo
+          sudo systemctl daemon-reload
+          sudo systemctl enable yolo
+          sudo systemctl start yolo
+          sudo systemctl status yolo
