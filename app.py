@@ -64,7 +64,7 @@ def predict(file: UploadFile = File(...),credentials: Annotated[str | None, Depe
     username = None
     if credentials:
         try:
-            username = verify_user(credentials)
+            username = verify_user(credentials,db)
         except HTTPException:
             username = None    #Invalid credentials still allow prediction, username remains null
 
@@ -106,31 +106,30 @@ def predict(file: UploadFile = File(...),credentials: Annotated[str | None, Depe
 
 
 @app.get("/prediction/count")
-def get_prediction_count(credentials: Annotated[str, Depends(verify_user)], db: Session=Depends(get_db)):
+def get_prediction_count(username: Annotated[str, Depends(verify_user)], db: Session=Depends(get_db)):
     """
     Get total number of prediction sessions
     """
-    count=repository.query_prediction_count(db)
+    count=repository.query_prediction_count(db,username)
     return {"count": count}
 
 @app.get("/labels")
-def get_uniqe_labels(credentials: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
+def get_uniqe_labels(username: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
     """
     Get all unique labels from detection objects
     """
-    labels=repository.query_unique_labels(db)
+    labels=repository.query_unique_labels(db,username)
     return {"labels": labels}
 
 @app.delete("/prediction/{uid}")
-def delete_prediction(uid: str,credentials: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
-    dele1=repository.query_delete_from(db,'PredictionSession',uid)
+def delete_prediction(uid: str,username: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
+    dele1=repository.query_delete_from(db,'PredictionSession',uid,username)
     if dele1==0:
         raise HTTPException(status_code=404, detail="Prediction not found")
-    
-    dele2=repository.query_delete_from(db,'DetectionObjects',uid)
+
+    dele2=repository.query_delete_from(db,'DetectionObjects',uid,username)
     if dele2==0:
-        raise HTTPException(status_code=404, detail="Prediction not found")
-        
+        raise HTTPException(status_code=404, detail="Prediction not found") 
 
     # Check for the file with any of the known image extensions
     deleted = False
@@ -153,18 +152,18 @@ def delete_prediction(uid: str,credentials: Annotated[str, Depends(verify_user)]
         
 
 @app.get("/prediction/{uid}")
-def get_prediction_by_uid(uid: str,credentials: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
+def get_prediction_by_uid(uid: str,username: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
     """
     Get prediction session by uid with all detected objects
     """
 
     # Get prediction session
-    result = repository.query_get_prediction_by_uid(uid,'PredictionSession',db)
+    result = repository.query_get_prediction_by_uid(uid,'PredictionSession',db,username)
     if not result:
         raise HTTPException(status_code=404, detail="Prediction not found")
         
     # Get all detection objects for this prediction
-    objects = repository.query_get_prediction_by_uid(uid,'DetectionObjects',db)
+    objects = repository.query_get_prediction_by_uid(uid,'DetectionObjects',db,username)
 
     
     return {
@@ -183,19 +182,19 @@ def get_prediction_by_uid(uid: str,credentials: Annotated[str, Depends(verify_us
     }
 
 @app.get("/predictions/label/{label}")
-def get_predictions_by_label(label: str,credentials: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
+def get_predictions_by_label(label: str,username: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
     """
     Get prediction sessions containing objects with specified label
     """
-    rows=repository.query_get_prediction_by_label(label,db)    
+    rows=repository.query_get_prediction_by_label(label,db,username)    
     return [{"uid": row.uid, "timestamp": row.timestamp} for row in rows]
 
 @app.get("/predictions/score/{min_score}")
-def get_predictions_by_score(min_score: float,db: Session=Depends(get_db)):
+def get_predictions_by_score(min_score: float,username: Annotated[str, Depends(verify_user)],db: Session=Depends(get_db)):
     """
     Get prediction sessions containing objects with score >= min_score
     """
-    rows=repository.query_get_prediction_by_score(min_score,db)    
+    rows=repository.query_get_prediction_by_score(min_score,db,username)    
     return [{"uid": row.uid, "timestamp": row.timestamp} for row in rows]
 
 @app.get("/image/{type}/{filename}")
@@ -211,12 +210,12 @@ def get_image(type: str, filename: str,credentials: Annotated[str, Depends(verif
     return FileResponse(path)
 
 @app.get("/prediction/{uid}/image")
-def get_prediction_image(uid: str, request: Request,credentials: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
+def get_prediction_image(uid: str, request: Request,username: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
     """
     Get prediction image by uid
     """
     accept = request.headers.get("accept", "")
-    row = repository.query_get_prediction_image(uid,db)
+    row = repository.query_get_prediction_image(uid,db,username)
     if not row:
         raise HTTPException(status_code=404, detail="Prediction not found")
     image_path = row[0]
