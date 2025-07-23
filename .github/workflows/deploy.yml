@@ -1,52 +1,49 @@
-name: Deploy Service
+- name: Deploy to server
+  uses: appleboy/ssh-action@v1.0.3
+  with:
+    host: ${{ secrets.HOST }}
+    username: ubuntu
+    key: ${{ secrets.SSH_KEY }}
+    script: |
+      REPO_DIR=/home/ubuntu/YoloService
+      REPO_URL=https://github.com/TameerAmer/YoloService.git
 
-on:
-  push:
-    branches:
-     - main
-  workflow_dispatch:
+      sudo apt update
+      sudo apt install -y python3 python3-venv python3-pip
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.HOST }}
-        username: ubuntu
-        key: ${{ secrets.SSH_KEY }}
-        script: |
-          REPO_DIR=/home/ubuntu/YoloService
-          REPO_URL=https://github.com/TameerAmer/YoloService.git
+      if [ ! -d "$REPO_DIR" ]; then
+        git clone $REPO_URL $REPO_DIR
+      fi
 
-          # Install Python 3, venv, and pip if not already installed
-          sudo apt update
-          sudo apt install -y python3 python3-venv python3-pip
+      cd $REPO_DIR
+      git pull origin main
 
-          # Clone the repo if it doesn't exist
-          if [ ! -d "$REPO_DIR" ]; then
-            git clone $REPO_URL $REPO_DIR
-          fi
+      if [ ! -d ".venv" ]; then
+        python3 -m venv .venv
+      fi
 
-          cd $REPO_DIR
-          git pull origin main
+      source .venv/bin/activate
+      pip install -r requirements.txt
+      pip install -r torch-requirements.txt
 
-          # Setup virtual environment
-          if [ ! -d ".venv" ]; then
-            python3 -m venv .venv
-          fi
+      # Create systemd service file if it does not exist or overwrite
+      sudo tee /etc/systemd/system/yolo.service > /dev/null <<EOF
+[Unit]
+Description=Yolo Service
+After=network.target
 
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          pip install -r torch-requirements.txt
+[Service]
+WorkingDirectory=$REPO_DIR
+ExecStart=$REPO_DIR/.venv/bin/python $REPO_DIR/app.py
+Restart=always
+User=ubuntu
 
-          # Restart the YOLO service
-          sudo systemctl daemon-reload
-          sudo systemctl enable yolo
-          sudo systemctl start yolo
-          sudo systemctl status yolo
+[Install]
+WantedBy=multi-user.target
+EOF
+
+      # Reload systemd daemon and enable/start service
+      sudo systemctl daemon-reload
+      sudo systemctl enable yolo
+      sudo systemctl restart yolo
+      sudo systemctl status yolo
