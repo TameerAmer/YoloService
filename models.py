@@ -1,9 +1,9 @@
 # models.py
 
 from sqlalchemy import Column, Index, String, DateTime, Integer, Float
-from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
 
+from datetime import datetime,timezone
+from sqlalchemy.orm import declarative_base
 # All models inherit from this base class
 Base = declarative_base()
 
@@ -16,7 +16,7 @@ class PredictionSession(Base):
     __tablename__ = 'prediction_sessions'
     
     uid = Column(String, primary_key=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
     original_image = Column(String)
     predicted_image = Column(String)
     username=Column(String)
