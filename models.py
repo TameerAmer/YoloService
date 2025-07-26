@@ -1,6 +1,6 @@
 # models.py
 
-from sqlalchemy import Column, String, DateTime, Integer, Float
+from sqlalchemy import Column, Index, String, DateTime, Integer, Float
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -46,5 +46,9 @@ class Users(Base):
     username=Column(String,unique=True)
     password=Column(String)
 
+
+Index("idx_prediction_uid", DetectionObjects.prediction_uid)
+Index("idx_label", DetectionObjects.label)
+Index("idx_score", DetectionObjects.score)
 
 

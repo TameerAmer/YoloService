@@ -5,9 +5,11 @@ import uuid
 from fastapi.testclient import TestClient
 from PIL import Image
 import io
-import os
-from app import app, init_db,DB_PATH
+from app import app,DB_PATH,get_db
 import base64
+
+from db import SessionLocal
+from models import PredictionSession,DetectionObjects
 
 def get_basic_auth_header(username: str, password: str) -> dict:
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
@@ -15,23 +17,33 @@ def get_basic_auth_header(username: str, password: str) -> dict:
 
 class Test_Delete(unittest.TestCase):
 
-    def setUp(self):
-        self.client = TestClient(app)
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
 
-        init_db()
-        
-        # Register test user
-        self.username = "tameer"
-        self.password = "1234"
-        auth_header = get_basic_auth_header(self.username, self.password)
-        self.client.post("/register", headers=auth_header)
+    @classmethod
+    def setUpClass(cls):
+        cls.db = SessionLocal()
 
-        self.test_image = Image.new('RGB', (100, 100), color='red')
-        self.image_bytes = io.BytesIO()
-        self.test_image.save(self.image_bytes, format='JPEG')
-        self.image_bytes.seek(0)
+        # Override FastAPI dependency to use test session
+        def override_get_db():
+            try:
+                yield cls.db
+            finally:
+                pass
+
+        app.dependency_overrides[get_db] = override_get_db
+        cls.client = TestClient(app)
+
+        cls.username = "mockuser"
+        cls.password = "1234"
+
+        cls.test_image = Image.new('RGB', (100, 100), color='red')
+        cls.image_bytes = io.BytesIO()
+        cls.test_image.save(cls.image_bytes, format='JPEG')
+        cls.image_bytes.seek(0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.close()
+        app.dependency_overrides.clear()
 
     def test_detete_not_found(self):
         headers = get_basic_auth_header(self.username, self.password)
@@ -54,6 +66,7 @@ class Test_Delete(unittest.TestCase):
 
     
     def test_delete_prediction_success(self):
+        self.image_bytes.seek(0)
         # Make a prediction first
         response = self.client.post(
             "/predict",
@@ -62,10 +75,12 @@ class Test_Delete(unittest.TestCase):
         headers = get_basic_auth_header(self.username, self.password)
         uid = response.json()["prediction_uid"]
 
-        # Force an artificial detection so delete won't 404
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid, "dog"))
-            conn.commit()
+        # Force insert username and detection manually
+        session = self.db.query(PredictionSession).filter_by(uid=uid).first()
+        self.assertIsNotNone(session)
+        session.username = self.username
+        self.db.add(DetectionObjects(prediction_uid=uid, label="dog"))
+        self.db.commit()
 
         # Now delete should succeed
         response2 = self.client.delete(f"/prediction/{uid}", headers=headers)
@@ -86,18 +101,24 @@ class Test_Delete(unittest.TestCase):
 
     def test_delete_prediction_session_missing(self):
         headers = get_basic_auth_header(self.username, self.password)
-        now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         uid = "existing_but_file_missing"
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("INSERT INTO prediction_sessions (uid, timestamp) VALUES (?, ?)", (uid, now))
-            conn.execute("INSERT INTO detection_objects (prediction_uid, label) VALUES (?, ?)", (uid, "cat"))
-            conn.commit()
+        with SessionLocal() as db:
+            # Clear if exists
+            self.db.query(DetectionObjects).filter_by(prediction_uid=uid).delete()
+            self.db.query(PredictionSession).filter_by(uid=uid).delete()
+            self.db.commit()
+
+            # Insert via ORM
+            ps = PredictionSession(uid=uid, timestamp=now, username="mockuser")
+            self.db.add(ps)
+            self.db.add(DetectionObjects(prediction_uid=uid, label="cat"))
+            self.db.commit()
         response = self.client.delete(f"/prediction/{uid}",headers=headers)
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "Prediction file not found")
-
 
 
 

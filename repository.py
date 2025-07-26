@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import json
 from sqlalchemy.orm import Session
 from models import PredictionSession,Users,DetectionObjects
@@ -25,12 +25,12 @@ def query_user_by_credentials(db: Session, username, password):
     return db.query(Users).filter_by(username=username, password=password).first()
 
 def query_prediction_count(db: Session,username):
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     count = db.query(func.count(PredictionSession.uid)).filter(and_(PredictionSession.timestamp >= seven_days_ago,PredictionSession.username == username)).scalar()
     return count
 
 def query_unique_labels(db: Session,username):
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
     stmt = (
         select(distinct(DetectionObjects.label))
@@ -43,14 +43,22 @@ def query_unique_labels(db: Session,username):
     result = db.execute(stmt).scalars().all()
     return result
 
-def query_delete_from(db:Session,db_name,uid,username):
-    if db_name=='PredictionSession':
-        stmt=delete(PredictionSession).where(and_(PredictionSession.uid==uid,PredictionSession.username==username))
-        result=db.execute(stmt)
+def query_delete_from(db: Session, db_name, uid, username):
+    if db_name == 'PredictionSession':
+        stmt = delete(PredictionSession).where(and_(PredictionSession.uid == uid, PredictionSession.username == username))
+        result = db.execute(stmt)
         db.commit()
         return result.rowcount
-    stmt=delete(DetectionObjects).where(DetectionObjects.prediction_uid==uid)
-    result=db.execute(stmt)
+    # For DetectionObjects, ensure we only delete objects belonging to predictions owned by the user
+    # This assumes DetectionObjects.prediction_uid relates to PredictionSession.uid
+    stmt = delete(DetectionObjects).where(
+        DetectionObjects.prediction_uid.in_(
+            select(PredictionSession.uid).where(
+                and_(PredictionSession.uid == uid, PredictionSession.username == username)
+            )
+        )
+    )
+    result = db.execute(stmt)
     db.commit()
     return result.rowcount
 

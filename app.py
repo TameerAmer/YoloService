@@ -79,7 +79,6 @@ def predict(file: UploadFile = File(...),credentials: Annotated[str | None, Depe
         shutil.copyfileobj(file.file, f)
 
     results = model(original_path, device="cpu")
-
     annotated_frame = results[0].plot()
     annotated_image = Image.fromarray(annotated_frame)
     annotated_image.save(predicted_path)
@@ -122,14 +121,14 @@ def get_uniqe_labels(username: Annotated[str, Depends(verify_user)],db: Session 
     return {"labels": labels}
 
 @app.delete("/prediction/{uid}")
-def delete_prediction(uid: str,username: Annotated[str, Depends(verify_user)],db: Session = Depends(get_db)):
-    dele1=repository.query_delete_from(db,'PredictionSession',uid,username)
-    if dele1==0:
+def delete_prediction(uid: str, username: Annotated[str, Depends(verify_user)], db: Session = Depends(get_db)):
+    # First, check if the prediction session exists and belongs to the user
+    dele1 = repository.query_delete_from(db, 'PredictionSession', uid, username)
+    if dele1 == 0:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
-    dele2=repository.query_delete_from(db,'DetectionObjects',uid,username)
-    if dele2==0:
-        raise HTTPException(status_code=404, detail="Prediction not found") 
+    # Delete detection objects (this might return 0 if no detections exist, which is valid)
+    repository.query_delete_from(db, 'DetectionObjects', uid, username)
 
     # Check for the file with any of the known image extensions
     deleted = False
