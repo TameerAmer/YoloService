@@ -1,14 +1,9 @@
 import base64
-import datetime
-import os
-import sqlite3
 import unittest
 import uuid
 from fastapi.testclient import TestClient
-from PIL import Image
-import io
 
-from app import app, DB_PATH, init_db
+from app import app
 
 def get_basic_auth_header(username: str, password: str) -> dict:
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
@@ -24,9 +19,17 @@ class TestRegister(unittest.TestCase):
         self.client.post("/register", headers=self.auth_header)
 
     def test_existing_user(self):
-        response = self.client.post("register",headers=self.auth_header)
+        response = self.client.post("/register",headers=self.auth_header)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], "Username already exists")
+
+    def test_register_success(self):
+        new_username = f"user_{uuid.uuid4()}"
+        new_password = "newpass"
+        new_auth_header = get_basic_auth_header(new_username, new_password)
+        response = self.client.post("/register", headers=new_auth_header)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"message": "User registered successfully"})
 
 
     
