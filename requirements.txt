@@ -17,3 +17,6 @@ pytest-cov==4.1.0
 pytest-html==3.2.0
 
 sqlalchemy
+
+psycopg2-binary
+dotenv

@@ -1,9 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request,Depends
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 from fastapi.security  import HTTPBasic, HTTPBasicCredentials
 from ultralytics import YOLO
 from PIL import Image
-import sqlite3
 import os
 import uuid
 import shutil
@@ -11,7 +10,7 @@ import time
 from typing import Annotated
 
 from db import get_db,engine
-from models import Base, PredictionSession
+from models import Base
 from sqlalchemy.orm import Session
 import repository
 
@@ -26,7 +25,7 @@ security=HTTPBasic()
 UPLOAD_DIR = "uploads/original"
 PREDICTED_DIR = "uploads/predicted"
 DB_PATH = "predictions.db"
-
+ 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PREDICTED_DIR, exist_ok=True)
 
