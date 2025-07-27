@@ -11,9 +11,9 @@ load_dotenv()
 DB_BACKEND = os.getenv("DB_BACKEND", "sqlite")
 
 if DB_BACKEND == "postgres":    
-    DATABASE_URL = DATABASE_URL = "postgresql://user:pass@localhost:5432/predictions" #paragma: no cover
+    DATABASE_URL = DATABASE_URL = "postgresql://user:pass@localhost:5432/predictions" # pragma: no cover
 else:
-    DATABASE_URL = "sqlite:///./predictions.db" #paragma: no cover
+    DATABASE_URL = "sqlite:///./predictions.db" # pragma: no cover
 
 engine = create_engine(
     DATABASE_URL,

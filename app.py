@@ -250,6 +250,6 @@ def health():
     """
     return {"status": "ok"}
 
-if __name__ == "__main__":  #paragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8080,reload=True)
