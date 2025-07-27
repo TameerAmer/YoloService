@@ -75,3 +75,20 @@ class TestGetPredictionByUid(unittest.TestCase):
         self.assertEqual(data["uid"], "123")
         self.assertEqual(data["detection_objects"], [])
         self.assertEqual(mock_query.call_count, 2)
+
+    def test_detection_objects_branch(self):
+        mock_db = Mock()
+
+        # Simulate query chaining
+        mock_query = mock_db.query.return_value
+        mock_filter = mock_query.filter_by.return_value
+        mock_filter.all.return_value = ["object1", "object2"]
+
+        result = repository.query_get_prediction_by_uid(
+            uid="some_uid", db_name="OtherModel", db=mock_db, username="tameer"
+        )
+
+        self.assertEqual(result, ["object1", "object2"])
+        mock_db.query.assert_called()
+        mock_query.filter_by.assert_called_with(prediction_uid="some_uid")
+        mock_filter.all.assert_called()
