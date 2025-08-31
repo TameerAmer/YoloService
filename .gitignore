@@ -13,3 +13,9 @@
 uploads/
 
 __pycache__
+
+htmlcov/
+allure-*
+.coverage
+*.xml
+.pytest_cache/

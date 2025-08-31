@@ -1,0 +1,33 @@
+# Python virtual environments
+.venv/
+env/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE/editor configs
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+
+# Database files
+*.db
+
+
+
+
+# Test and coverage outputs
+htmlcov/
+.pytest_cache/
+.coverage
+*.xml
+allure-*
+
+# OS files
+.DS_Store

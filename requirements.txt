@@ -20,3 +20,5 @@ sqlalchemy
 
 psycopg2-binary
 dotenv
+
+allure-pytest
