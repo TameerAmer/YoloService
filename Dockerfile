@@ -8,4 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install -r torch-requirements.txt
 RUN pip install -r requirements.txt
+
+ENV AWS_S3_BUCKET=tameeramer5tech
+ENV AWS_REGION=us-west-1
+
 CMD ["python", "app.py"]
