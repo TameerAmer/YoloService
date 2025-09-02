@@ -1,4 +1,6 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request,Depends
+from fastapi.params import Query
 from fastapi.responses import FileResponse
 from fastapi.security  import HTTPBasic, HTTPBasicCredentials
 from ultralytics import YOLO
@@ -14,10 +16,16 @@ from models import Base
 from sqlalchemy.orm import Session
 import repository
 
+# S3 additions
+import boto3
+from botocore.exceptions import ClientError
+from mimetypes import guess_type
+
 # Disable GPU usage
 import torch
 torch.cuda.is_available = lambda: False
 
+load_dotenv() 
 app = FastAPI()
 
 security=HTTPBasic()
@@ -25,9 +33,60 @@ security=HTTPBasic()
 UPLOAD_DIR = "uploads/original"
 PREDICTED_DIR = "uploads/predicted"
 DB_PATH = "predictions.db"
+
+
+AWS_REGION = os.environ.get("AWS_REGION")
+AWS_S3_BUCKET = os.environ.get("AWS_S3_BUCKET")
+
+s3_client = None
+if AWS_REGION and AWS_S3_BUCKET:
+    s3_client = boto3.client("s3", region_name=AWS_REGION)
+
+
+def _s3_required():
+    if not s3_client or not AWS_S3_BUCKET:
+        raise HTTPException(status_code=500, detail="S3 not configured (missing AWS_REGION / AWS_S3_BUCKET)")
+
+def _upload_to_s3(local_path: str, key: str):
+    _s3_required()
+    ctype, _ = guess_type(local_path)
+    extra = {"ContentType": ctype or "application/octet-stream"}
+    try:
+        s3_client.upload_file(local_path, AWS_S3_BUCKET, key, ExtraArgs=extra)
+    except ClientError as e:
+        raise HTTPException(status_code=502, detail=f"S3 upload failed: {e.response['Error']['Message']}")
+
+def _download_from_s3(key: str, local_path: str):
+    _s3_required()
+    try:
+        s3_client.download_file(AWS_S3_BUCKET, key, local_path)
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            raise HTTPException(status_code=404, detail="Image key not found in S3")
+        raise HTTPException(status_code=502, detail=f"S3 download failed: {e.response['Error']['Message']}")
+
+def _object_exists(key: str) -> bool:
+    _s3_required()
+    try:
+        s3_client.head_object(Bucket=AWS_S3_BUCKET, Key=key)
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound"):
+            return False
+        raise
+
+def _copy_s3_object(source_key: str, dest_key: str):
+    _s3_required()
+    try:
+        s3_client.copy(
+            {"Bucket": AWS_S3_BUCKET, "Key": source_key},
+            AWS_S3_BUCKET,
+            dest_key
+        )
+    except ClientError as e:
+        raise HTTPException(status_code=502, detail=f"S3 copy failed: {e.response['Error']['Message']}")
+# ...existing code...
  
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(PREDICTED_DIR, exist_ok=True)
 
 # Download the AI model (tiny model ~6MB)
 model = YOLO("yolov8n.pt")  
@@ -56,50 +115,120 @@ async def optional_auth(request: Request):
     return await security(request)
 
 @app.post("/predict")
-def predict(file: UploadFile = File(...),credentials: Annotated[str | None, Depends(optional_auth)] = None,db: Session = Depends(get_db)):
+def predict(
+    file: UploadFile | None = File(None),
+    img: str | None = Query(default=None, description="S3 image file name (e.g. beatles.jpeg)"),
+    credentials: Annotated[str | None, Depends(optional_auth)] = None,
+    db: Session = Depends(get_db)
+):
     """
-    Predict objects in an image
+    Predict objects in an image.
+    Either upload a file OR provide ?img=<filename> to fetch from S3.
+    If ?img is used, image will be downloaded from S3 at <bucket>/<user|anonymous>/original/<filename>.
+    After prediction both original and annotated images are stored locally and uploaded to S3:
+      <bucket>/<user|anonymous>/original/<filename>
+      <bucket>/<user|anonymous>/predicted/<filename>
     """
+    if not file and not img:
+        raise HTTPException(status_code=400, detail="Provide an uploaded file or img query parameter")
+    if file and img:
+        raise HTTPException(status_code=400, detail="Use either file upload or img query parameter, not both")
+
     username = None
     if credentials:
         try:
-            username = verify_user(credentials,db)
+            username = verify_user(credentials, db)
         except HTTPException:
-            username = None    #Invalid credentials still allow prediction, username remains null
+            username = None  # anonymous if invalid
+
+    user_folder = username or "anonymous"
 
     start_time = time.time()
-    
-    ext = os.path.splitext(file.filename)[1]
-    uid = str(uuid.uuid4())
-    original_path = os.path.join(UPLOAD_DIR, uid + ext)
-    predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
 
-    with open(original_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    if img:
+        # Use S3 image
+        ext = os.path.splitext(img)[1]
+        if ext.lower() not in [".jpg", ".jpeg", ".png"]:
+            raise HTTPException(status_code=400, detail="Unsupported image extension")
+        uid = str(uuid.uuid4())
+        original_path = os.path.join(UPLOAD_DIR, uid + ext)
+        predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
 
+        original_key = f"{user_folder}/original/{img}"
+        predicted_key = f"{user_folder}/predicted/{img}"
+
+        try:
+            _download_from_s3(original_key, original_path)
+        except HTTPException as e:
+            # If authenticated user and original not found, try fallback locations
+            if e.status_code == 404 and username:
+                fallback_keys = [
+                    f"anonymous/original/{img}",  # from anonymous pool
+                    img  # root level object (legacy placement)
+                ]
+                copied = False
+                for fk in fallback_keys:
+                    if _object_exists(fk):
+                        _copy_s3_object(fk, original_key)
+                        _download_from_s3(original_key, original_path)
+                        copied = True
+                        break
+                if not copied:
+                    raise  # re-raise original 404
+            else:
+                raise
+    else:
+        # ...existing code for uploaded file branch...
+        ext = os.path.splitext(file.filename)[1]
+        uid = str(uuid.uuid4())
+        original_path = os.path.join(UPLOAD_DIR, uid + ext)
+        predicted_path = os.path.join(PREDICTED_DIR, uid + ext)
+        with open(original_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        original_filename = file.filename
+        predicted_filename = file.filename
+        original_key = f"{user_folder}/original/{original_filename}"
+        predicted_key = f"{user_folder}/predicted/{predicted_filename}"
+    # Run YOLO prediction
     results = model(original_path, device="cpu")
     annotated_frame = results[0].plot()
     annotated_image = Image.fromarray(annotated_frame)
     annotated_image.save(predicted_path)
 
-    repository.save_prediction_session(uid, original_path, predicted_path,username,db)
-    
+    # Persist to DB with local paths (unchanged logic)
+    repository.save_prediction_session(uid, original_path, predicted_path, username, db)
+
     detected_labels = []
     for box in results[0].boxes:
         label_idx = int(box.cls[0].item())
         label = model.names[label_idx]
         score = float(box.conf[0])
         bbox = box.xyxy[0].tolist()
-        repository.save_detection_object(uid, label, score, bbox,db)
+        repository.save_detection_object(uid, label, score, bbox, db)
         detected_labels.append(label)
+
+    # Upload to S3 (if configured)
+    if AWS_S3_BUCKET and s3_client:
+        try:
+            # If using img query param we keep provided name for keys
+            if img:
+                original_key = f"{user_folder}/original/{img}"
+                predicted_key = f"{user_folder}/predicted/{img}"
+            _upload_to_s3(original_path, original_key)
+            _upload_to_s3(predicted_path, predicted_key)
+        except HTTPException:
+            # Allow prediction to succeed even if S3 upload fails: could log here
+            pass
 
     processing_time = round(time.time() - start_time, 2)
 
     return {
-        "prediction_uid": uid, 
+        "prediction_uid": uid,
         "detection_count": len(results[0].boxes),
         "labels": detected_labels,
-        "time_took": processing_time
+        "time_took": processing_time,
+        "s3_original_key": original_key if AWS_S3_BUCKET else None,
+        "s3_predicted_key": predicted_key if AWS_S3_BUCKET else None
     }
 
 
